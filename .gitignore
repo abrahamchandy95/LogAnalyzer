@@ -1,0 +1,48 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+
+# --- Virtual environments ---
+.venv/
+venv/
+ENV/
+.env
+
+# --- Testing / coverage ---
+.pytest_cache/
+.coverage*
+htmlcov/
+.tox/
+.nox/
+
+# --- Linters / type checkers ---
+.mypy_cache/
+.ruff_cache/
+.pyright/
+.pylint.d/
+
+# --- IDEs / editors ---
+.vscode/
+.idea/
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+
+# --- Outputs & Data ---
+# Ignore all CSV and TSV files (e.g. comparison_results.csv)
+*.csv
+*.tsv
+
+# Output directories
+_analysis_outputs/
+results/
+outputs/
