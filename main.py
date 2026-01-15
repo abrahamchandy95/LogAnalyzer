@@ -1,207 +1,108 @@
-import argparse
-import sys
 from pathlib import Path
+
 import pandas as pd
-import numpy as np
 
-# Import from our modules
-from src.domain import LogSource
-from src.types import ExecutionID
-from src.parsing.strategies import TigerGraphHeaderStrategy
-from src.parsing.crawler import DirectoryLogCrawler
-from src.parsing.restpp import parse_restpp_event
-from src.parsing.gpe import parse_gpe_event
-from src.analysis.comparator import QueryLatencyComparator
-from src.analysis.repair import assign_request_ids_by_window
-from src.analysis.metrics import calculate_execution_summary
-from src.visualization.console import SummaryPresenter
-from src.visualization.plotter import BarChartPresenter
-
-# Configuration constants
-NODES = ["m1", "m2", "m3", "m4"]
+from analysis.bottlenecks import top_bottlenecks
+from analysis.requests import build_exec_request_table, extract_ids, summarize_requests
+from analysis.stats import (
+    build_ordered_step_side_table,
+    compare_two_queries,
+    make_step_stats,
+)
+from cli import parse_args
+from export.plot import open_file_in_default_app, plot_step_means
+from export.writers import write_csv, write_lines
+from parsers.gpe import parse_gpe
+from parsers.restpp import parse_restpp
+from transforms.attach import attach_steps_to_requests
+from transforms.gaps import add_query_name, build_gaps
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="TigerGraph Log Comparator")
+def run_pipeline(
+    *, out_dir: Path, runs, nodes, base_query: str, opt_query: str
+) -> Path | None:
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Input Directories
-    parser.add_argument(
-        "--base-dir", type=Path, required=True, help="Path to logs for the BASE run"
-    )
-    parser.add_argument(
-        "--cand-dir",
-        type=Path,
-        required=True,
-        help="Path to logs for the CANDIDATE (Optimized) run",
-    )
+    # Parse logs
+    all_rest: list[pd.DataFrame] = []
+    all_gpe: list[pd.DataFrame] = []
 
-    # Query Names
-    parser.add_argument(
-        "--base-name", type=str, required=True, help="Query name for BASE variant"
-    )
-    parser.add_argument(
-        "--cand-name", type=str, required=True, help="Query name for CANDIDATE variant"
-    )
+    for run in runs:
+        all_rest.append(parse_restpp(run.key, run.path, nodes=nodes))
+        all_gpe.append(parse_gpe(run.key, run.path, nodes=nodes))
 
-    # Config
-    parser.add_argument("--plot", action="store_true", help="Show matplotlib chart")
-    parser.add_argument(
-        "--top-n", type=int, default=20, help="Number of bottlenecks to show"
-    )
+    restpp_req = pd.concat(all_rest, ignore_index=True) if all_rest else pd.DataFrame()
+    gpe_events = pd.concat(all_gpe, ignore_index=True) if all_gpe else pd.DataFrame()
 
-    return parser.parse_args()
+    # Transforms
+    gpe_attached = attach_steps_to_requests(gpe_events)
+    gaps = build_gaps(gpe_attached)
+    gapsq = add_query_name(gaps, restpp_req)
 
+    # Analysis
+    req_summary = summarize_requests(restpp_req, gpe_attached)
+    exec_tbl = build_exec_request_table(restpp_req, gpe_attached)
+    base_ids, opt_ids = extract_ids(exec_tbl, base_query, opt_query)
 
-def load_logs(run_dir: Path, run_id: ExecutionID) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Orchestrates the crawling of one run directory.
-    Returns (restpp_df, gpe_df).
-    """
-    print(f"Loading logs from {run_dir} (RunID: {run_id})...")
-
-    header_strat = TigerGraphHeaderStrategy()
-
-    # Instantiate Crawlers
-    rest_crawler = DirectoryLogCrawler(
-        glob_pattern="restpp*",
-        line_processor=parse_restpp_event,
-        header_strategy=header_strat,
+    step_stats = make_step_stats(gapsq)
+    compare = compare_two_queries(step_stats, base_query, opt_query)
+    side = build_ordered_step_side_table(
+        gapsq, base_query=base_query, opt_query=opt_query
     )
 
-    gpe_crawler = DirectoryLogCrawler(
-        glob_pattern="gpe*",
-        line_processor=parse_gpe_event,
-        header_strategy=header_strat,
+    bott_base = top_bottlenecks(gapsq, base_query, n=50)
+    bott_opt = top_bottlenecks(gapsq, opt_query, n=50)
+
+    # Write outputs (outside repo)
+    write_csv(restpp_req, out_dir / "restpp_requests.csv")
+    write_csv(gpe_attached, out_dir / "gpe_events_attached.csv")
+    write_csv(gapsq, out_dir / "gaps_with_query.csv")
+    write_csv(req_summary, out_dir / "request_summary.csv")
+    write_csv(exec_tbl, out_dir / "exec_request_table.csv")
+
+    write_csv(step_stats, out_dir / "step_stats.csv")
+    write_csv(compare, out_dir / "compare_two_queries.csv")
+    write_csv(side, out_dir / "side_ordered_steps.csv")
+
+    write_csv(bott_base, out_dir / "bottlenecks_base.csv")
+    write_csv(bott_opt, out_dir / "bottlenecks_opt.csv")
+
+    write_lines(base_ids, out_dir / "base_request_ids.txt")
+    write_lines(opt_ids, out_dir / "opt_request_ids.txt")
+
+    # Plot (optional if side empty)
+    if (
+        not side.empty
+        and "base_mean_ms" in side.columns
+        and "opt_mean_ms" in side.columns
+    ):
+        plot_path = out_dir / "step_means_base_vs_opt.png"
+        plot_step_means(
+            side, out_path=plot_path, title="Per-step mean duration: Base vs Optimized"
+        )
+        return plot_path
+
+    return None
+
+
+def main(argv: list[str] | None = None) -> int:
+    cfg, open_plot = parse_args(argv)
+
+    plot_path = run_pipeline(
+        out_dir=cfg.out_dir,
+        runs=cfg.runs,
+        nodes=cfg.nodes,
+        base_query=cfg.base_query,
+        opt_query=cfg.opt_query,
     )
 
-    all_rest = []
-    all_gpe = []
+    print(f"Outputs written to: {cfg.out_dir}")
 
-    for node in NODES:
-        source = LogSource(execution_id=run_id, server_node=node, file_path=run_dir)
+    if open_plot and plot_path is not None:
+        open_file_in_default_app(plot_path)
 
-        # Parse
-        print(f"  Scanning {node}...")
-        all_rest.append(rest_crawler.parse(source))
-        all_gpe.append(gpe_crawler.parse(source))
-
-    # Combine
-    rest_df = (
-        pd.concat(all_rest, ignore_index=True)
-        if any(not x.empty for x in all_rest)
-        else pd.DataFrame()
-    )
-    gpe_df = (
-        pd.concat(all_gpe, ignore_index=True)
-        if any(not x.empty for x in all_gpe)
-        else pd.DataFrame()
-    )
-
-    return rest_df, gpe_df
-
-
-def print_execution_summary(
-    metrics_df: pd.DataFrame, base_id: str, cand_id: str, base_name: str, cand_name: str
-):
-    """
-    Prints high-level stats (Avg Latency, Queue Delay) to console.
-    """
-    print("\n" + "=" * 50)
-    print("HIGH-LEVEL EXECUTION SUMMARY")
-    print("=" * 50)
-
-    # Filter metrics by run
-    base_m = metrics_df[metrics_df["run"] == base_id]
-    cand_m = metrics_df[metrics_df["run"] == cand_id]
-
-    # Helper to calculate mean safe
-    def get_mean(df, col):
-        return df[col].mean() if col in df.columns else np.nan
-
-    print(
-        f"{'Metric':<25} | {'Base (' + base_name + ')':<30} | {'Candidate (' + cand_name + ')':<30} | {'Diff':<10}"
-    )
-    print("-" * 100)
-
-    metrics = [
-        ("Avg Actual GPE Time", "actual_gpe_ms"),
-        ("Avg Reported Time", "reported_udf_ms"),
-        ("Avg Post-Proc Overhead", "post_process_overhead_ms"),
-    ]
-
-    for label, col in metrics:
-        b_val = get_mean(base_m, col)
-        c_val = get_mean(cand_m, col)
-        diff = c_val - b_val
-        print(f"{label:<25} | {b_val:>10.2f} ms | {c_val:>10.2f} ms | {diff:>+8.2f} ms")
-
-    print("-" * 100)
-    print(f"Request Count | {len(base_m):>10} | {len(cand_m):>10} |")
-    print("\n")
-
-
-def main():
-    args = parse_args()
-
-    #  Validation
-    if not args.base_dir.exists():
-        sys.exit(f"Error: Base directory not found: {args.base_dir}")
-    if not args.cand_dir.exists():
-        sys.exit(f"Error: Candidate directory not found: {args.cand_dir}")
-
-    #  Load Data
-    BASE_RUN_ID: ExecutionID = "base_run"
-    CAND_RUN_ID: ExecutionID = "cand_run"
-
-    base_rest, base_gpe = load_logs(args.base_dir, BASE_RUN_ID)
-    cand_rest, cand_gpe = load_logs(args.cand_dir, CAND_RUN_ID)
-
-    if base_gpe.empty or cand_gpe.empty:
-        sys.exit("Error: No GPE logs found in one of the directories.")
-
-    #  Pre-processing / Merging
-    print("Merging and repairing log streams...")
-    full_rest = pd.concat([base_rest, cand_rest], ignore_index=True)
-    full_gpe = pd.concat([base_gpe, cand_gpe], ignore_index=True)
-
-    # Apply Session Repair (Notebook Logic: Window-based ID filling)
-    full_gpe = assign_request_ids_by_window(full_gpe)
-
-    metrics_df = calculate_execution_summary(full_gpe, full_rest)
-    print_execution_summary(
-        metrics_df, BASE_RUN_ID, CAND_RUN_ID, args.base_name, args.cand_name
-    )
-
-    # 4. Step-by-Step Analysis
-    print(f"Comparing Steps: {args.base_name} vs {args.cand_name}...")
-    comparator = QueryLatencyComparator()
-
-    report = comparator.compare_variants(
-        restpp_data=full_rest,
-        gpe_data=full_gpe,
-        base=args.base_name,
-        candidate=args.cand_name,
-    )
-
-    #  Visualization
-    # Console Summary (Bottlenecks)
-    console_presenter = SummaryPresenter()
-    console_presenter.present(report)
-
-    output_dir = Path("../_analysis_outputs")
-    output_dir.mkdir(exist_ok=True)
-
-    # Matplotlib Chart
-    if args.plot:
-        plotter = BarChartPresenter(top_n=args.top_n)
-        plot_path = output_dir / "latency_comparison.png"
-        plotter.present(report, save_path=plot_path)
-
-    out_csv = output_dir / "comparison_results.csv"
-
-    report.step_latency_comparison.to_csv(out_csv, index=False)
-    print(f"\nDetailed step comparison saved to {out_csv}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

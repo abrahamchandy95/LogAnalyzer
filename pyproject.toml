@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "LogAnalyzer"
+version = "0.1.0"
+description = "Compare two RESTPP/GPE query variants by parsing logs and computing per-step timing deltas."
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.14,<3.15"
+license = { text = "MIT" }
+authors = [{ name = "Your Name" }]
+keywords = ["logs", "performance", "profiling", "pandas", "restpp", "gpe"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: System :: Logging",
+  "Topic :: Software Development :: Testing",
+  "Topic :: System :: Systems Administration",
+]
+dependencies = [
+  "pandas==2.3.3",
+  "numpy==2.4.1",
+  "matplotlib==3.10.8",
+]
+
+[project.optional-dependencies]
+dev = [
+  "basedpyright>=1.21",
+  "ruff>=0.9",
+  "pytest>=8.0",
+  "types-setuptools",
+]
+
+[project.scripts]
+loganalyzer = "main:main"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+# IMPORTANT: include your top-level modules used by the script entrypoint
+py-modules = ["main", "cli"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["common*", "parsers*", "transforms*", "analysis*", "export*"]
+exclude = ["tests*"]
+
+[tool.basedpyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.14"
+
+# Keep strict for your code, but reduce pandas stub noise:
+reportUnknownMemberType = "none"
+reportUnknownVariableType = "none"
+reportUnknownArgumentType = "none"
+reportPrivateUsage = "none"
