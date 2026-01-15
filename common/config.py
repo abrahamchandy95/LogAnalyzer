@@ -11,3 +11,9 @@ class CompareConfig:
     base_query: QueryName
     opt_query: QueryName
     out_dir: Path = Path("out")
+
+
+@dataclass(frozen=True, slots=True)
+class AppConfig:
+    cfg: CompareConfig
+    open_plot: bool
