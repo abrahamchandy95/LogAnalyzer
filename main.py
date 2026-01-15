@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 from cli import parse_cli_args
+from common.reporting import PrintReporter
 from common.env import load_env_config
 from export.artifacts import save_all_artifacts
 from export.plot import open_file_in_default_app
@@ -23,7 +24,8 @@ def main() -> int:
     open_plot = app_config.open_plot
 
     print("\n--- Starting Performance Analysis ---")
-    results = run_performance_analysis(cfg)
+
+    results = run_performance_analysis(cfg, reporter=PrintReporter())
 
     print("\n--- Saving Artifacts ---")
     plot_path = save_all_artifacts(results, cfg.out_dir)
