@@ -1,31 +1,38 @@
+import os
+import subprocess
+import sys
 from pathlib import Path
 
-import sys
-import subprocess
-import os
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
 
 def plot_step_means(
-    side: pd.DataFrame, *, out_path: Path | None = None, title: str = ""
+    step_data: pd.DataFrame, *, out_path: Path | None = None, title: str = ""
 ) -> None:
-    plot_df = side.copy()
+    """
+    Generic plotting function for side-by-side bar charts.
+    """
+    # Create a copy to avoid mutating the input dataframe
+    plot_df = step_data.copy()
 
-    sort_col: str = "pos" if "pos" in plot_df.columns else "step_key"
+    # Determine sorting column
+    sort_col = "pos" if "pos" in plot_df.columns else "step_key"
     plot_df = plot_df.sort_values(by=sort_col, na_position="last")
 
+    # Data prep
     x = np.arange(len(plot_df))
     w = 0.45
-
     base = plot_df["base_mean_ms"].to_numpy()
     opt = plot_df["opt_mean_ms"].to_numpy()
     labels = plot_df["step_key"].astype(str).to_list()
 
+    # Plotting
     fig, ax = plt.subplots(figsize=(14, 6))
     ax.bar(x - w / 2, base, w, label="base")
     ax.bar(x + w / 2, opt, w, label="optimized")
+
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=90, fontsize=8)
     ax.set_ylabel("Mean time between LOG steps (ms)")
@@ -33,6 +40,7 @@ def plot_step_means(
     ax.legend()
     fig.tight_layout()
 
+    # Output handling
     try:
         if out_path is not None:
             out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -45,13 +53,13 @@ def plot_step_means(
 
 def open_file_in_default_app(path: Path) -> None:
     """
-    Best-effort: open a file with the OS default viewer (non-blocking).
+    OS-agnostic file opener.
     """
     try:
         if sys.platform == "darwin":
             subprocess.Popen(["open", str(path)])
         elif os.name == "nt":
-            # os.startfile is Windows-only; keep typing strict
+            # type ignore needed because startfile is only available on Windows
             getattr(os, "startfile")(str(path))  # type: ignore[misc]
         else:
             subprocess.Popen(["xdg-open", str(path)])
