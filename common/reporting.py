@@ -14,5 +14,5 @@ class PrintReporter:
 
 @dataclass(frozen=True, slots=True)
 class NullReporter:
-    def info(self, _msg: str) -> None:
+    def info(self, msg: str) -> None:
         return

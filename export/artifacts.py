@@ -1,54 +1,62 @@
 from pathlib import Path
 
+from common.reporting import NullReporter, Reporter
 from common.results import PipelineOutput
+from export.paths import OutputPaths, build_output_paths
 from export.plot import plot_step_means
 from export.writers import write_csv, write_lines
 
 
-def save_all_artifacts(results: PipelineOutput, out_dir: Path) -> Path | None:
+def save_all_artifacts(
+    results: PipelineOutput,
+    out_dir: Path,
+    *,
+    reporter: Reporter | None = None,
+) -> Path | None:
     """
-    Orchestrates the persistence of all analysis artifacts.
+    Persist all analysis artifacts.
     Returns the path to the main plot if it was generated.
     """
-    out_dir.mkdir(parents=True, exist_ok=True)
-    print(f"Writing outputs to: {out_dir}")
+    rep: Reporter = reporter if reporter is not None else NullReporter()
 
-    # Save Data Tables
-    _save_tables(results, out_dir)
+    paths = build_output_paths(out_dir)
+    paths.out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save Traceability IDs
-    write_lines(results.comparison.base_request_ids, out_dir / "base_request_ids.txt")
-    write_lines(results.comparison.opt_request_ids, out_dir / "opt_request_ids.txt")
+    rep.info(f"Writing outputs to: {paths.out_dir}")
 
-    # Generate Visualizations
-    return _generate_summary_plot(results, out_dir)
+    _write_tables(results, paths)
+    _write_traceability(results, paths)
+    plot_path = _write_plot(results, paths)
+
+    return plot_path
 
 
-def _save_tables(results: PipelineOutput, out_dir: Path) -> None:
-    """Internal helper to batch write all CSVs."""
+def _write_tables(results: PipelineOutput, paths: OutputPaths) -> None:
     ex = results.extracts
     ev = results.events
     cmp = results.comparison
 
-    # Raw / Transformed
-    write_csv(ex.rest_requests, out_dir / "restpp_requests.csv")
-    write_csv(ev.linked_events, out_dir / "gpe_events_attached.csv")
-    write_csv(ev.step_timings, out_dir / "gaps_with_query.csv")
+    write_csv(ex.rest_requests, paths.restpp_requests_csv)
+    write_csv(ev.linked_events, paths.gpe_events_attached_csv)
+    write_csv(ev.step_timings, paths.gaps_with_query_csv)
 
-    # Analysis
-    write_csv(cmp.request_summary, out_dir / "request_summary.csv")
-    write_csv(cmp.execution_table, out_dir / "exec_request_table.csv")
-    write_csv(cmp.step_statistics, out_dir / "step_stats.csv")
-    write_csv(cmp.query_vs_query_stats, out_dir / "compare_two_queries.csv")
-    write_csv(cmp.step_side_by_side, out_dir / "side_ordered_steps.csv")
+    write_csv(cmp.request_summary, paths.request_summary_csv)
+    write_csv(cmp.execution_table, paths.exec_request_table_csv)
+    write_csv(cmp.step_statistics, paths.step_stats_csv)
+    write_csv(cmp.query_vs_query_stats, paths.compare_two_queries_csv)
+    write_csv(cmp.step_side_by_side, paths.side_ordered_steps_csv)
 
-    # Bottlenecks
-    write_csv(cmp.bottlenecks_base, out_dir / "bottlenecks_base.csv")
-    write_csv(cmp.bottlenecks_opt, out_dir / "bottlenecks_opt.csv")
+    write_csv(cmp.bottlenecks_base, paths.bottlenecks_base_csv)
+    write_csv(cmp.bottlenecks_opt, paths.bottlenecks_opt_csv)
 
 
-def _generate_summary_plot(results: PipelineOutput, out_dir: Path) -> Path | None:
-    """Internal helper to determine if we can/should plot."""
+def _write_traceability(results: PipelineOutput, paths: OutputPaths) -> None:
+    cmp = results.comparison
+    write_lines(cmp.base_request_ids, paths.base_request_ids_txt)
+    write_lines(cmp.opt_request_ids, paths.opt_request_ids_txt)
+
+
+def _write_plot(results: PipelineOutput, paths: OutputPaths) -> Path | None:
     side = results.comparison.step_side_by_side
 
     if (
@@ -58,10 +66,9 @@ def _generate_summary_plot(results: PipelineOutput, out_dir: Path) -> Path | Non
     ):
         return None
 
-    plot_path = out_dir / "step_means_base_vs_opt.png"
     plot_step_means(
         side,
-        out_path=plot_path,
+        out_path=paths.step_means_png,
         title="Per-step mean duration: Base vs Optimized",
     )
-    return plot_path
+    return paths.step_means_png

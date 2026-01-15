@@ -1,6 +1,3 @@
-import os
-import subprocess
-import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -49,19 +46,3 @@ def plot_step_means(
             plt.show()
     finally:
         plt.close(fig)
-
-
-def open_file_in_default_app(path: Path) -> None:
-    """
-    OS-agnostic file opener.
-    """
-    try:
-        if sys.platform == "darwin":
-            subprocess.Popen(["open", str(path)])
-        elif os.name == "nt":
-            # type ignore needed because startfile is only available on Windows
-            getattr(os, "startfile")(str(path))  # type: ignore[misc]
-        else:
-            subprocess.Popen(["xdg-open", str(path)])
-    except Exception as e:
-        print(f"WARNING: failed to open file: {path} ({e})")
