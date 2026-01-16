@@ -13,6 +13,7 @@ from common.regexes import (
     UDF_STEP_RE,
 )
 from common.types import Node, RequestId, RunId
+from common.reporting import Reporter, NullReporter
 from common.constants import GPE_GLOB, GPE_STEP, GPE_UDF_START, GPE_UDF_STOP
 from parsers._walker import ParsedLine, walk_logs
 
@@ -52,6 +53,36 @@ _OUT_COLS = pd.Index(
         "raw_msg",
     ]
 )
+
+_GPE_DEDUPE_SUBSET: list[str] = ["run", "node", "tid", "ts", "raw_msg"]
+
+
+def _dedupe_gpe_events(df: pd.DataFrame, *, reporter: Reporter) -> pd.DataFrame:
+    """
+    Drop duplicate GPE events that are repeated across different files (log rotation / bundles).
+    We intentionally do NOT include log_path/lineno in the key because duplicates differ there.
+    """
+    if df.empty:
+        return df
+
+    # stable ordering so keep="first" is deterministic
+    df2 = df.sort_values(
+        ["run", "node", "tid", "ts", "log_path", "lineno"],
+        kind="mergesort",
+        na_position="last",
+    )
+
+    before = len(df2)
+    df2 = df2.drop_duplicates(subset=_GPE_DEDUPE_SUBSET, keep="first")
+    after = len(df2)
+
+    dropped = before - after
+    if dropped:
+        reporter.info(
+            f"GPE dedupe: dropped {dropped} duplicate events ({before} -> {after})"
+        )
+
+    return df2
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,8 +247,13 @@ def _make_udf_stop_row(
 
 
 def parse_gpe(
-    run_key: RunId, run_dir: Path, *, nodes: tuple[Node, ...]
+    run_key: RunId,
+    run_dir: Path,
+    *,
+    nodes: tuple[Node, ...],
+    reporter: Reporter | None = None,
 ) -> pd.DataFrame:
+    rep: Reporter = reporter if reporter is not None else NullReporter()
     rows: list[_GpeRow] = []
 
     def _on_line(pl: ParsedLine) -> None:
@@ -247,5 +283,8 @@ def parse_gpe(
         return pd.DataFrame(columns=_OUT_COLS)
 
     df = pd.DataFrame(rows).reindex(columns=_OUT_COLS)
+
+    df = _dedupe_gpe_events(df, reporter=rep)
+
     df = df.set_index(["run", "node", "tid", "ts"]).sort_index().reset_index()
     return df.reset_index(drop=True)
