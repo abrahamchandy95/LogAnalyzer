@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from common.types import RunInput, QueryName
+from common.model.types import RunInput, QueryName
 
 
 @dataclass(frozen=True, slots=True)

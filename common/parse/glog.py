@@ -1,13 +1,14 @@
 from pathlib import Path
-import numpy as np
-import pandas as pd
 from datetime import datetime
 
-from common.regexes import LOG_HEADER_DATE_RE, GLOG_INFO_LINE_RE, REQ_ID_RE
-from common.types import GlogEntry
+from common.parse.regexes import LOG_HEADER_DATE_RE, GLOG_INFO_LINE_RE
+from common.model.types import GlogEntry
 
 
 def detect_year_from_header(log_path: Path, default_year: int) -> int:
+    """
+    Extract year from a log header line like INFO.20251219..., if present.
+    """
     try:
         with log_path.open("r", errors="replace") as f:
             for i, line in enumerate(f):
@@ -22,6 +23,9 @@ def detect_year_from_header(log_path: Path, default_year: int) -> int:
 
 
 def parse_glog_line(line: str, year: int) -> GlogEntry | None:
+    """
+    Parse a glog INFO line prefix and return (ts, tid, msg).
+    """
     m = GLOG_INFO_LINE_RE.match(line)
     if not m:
         return None
@@ -35,13 +39,3 @@ def parse_glog_line(line: str, year: int) -> GlogEntry | None:
         return None
 
     return GlogEntry(ts=ts, tid=int(m.group("tid")), msg=m.group("msg"))
-
-
-def extract_request_id(msg: str) -> str | None:
-    m = REQ_ID_RE.search(msg)
-    return m.group("rid") if m else None
-
-
-def pct(s: pd.Series, p: float) -> float:
-    x = s.dropna().to_numpy()
-    return float(np.nanpercentile(x, p)) if len(x) else float("nan")

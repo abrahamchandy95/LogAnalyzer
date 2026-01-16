@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from common.utils import pct
+from common.support.stats import pct
 
 _EMPTY_STEP_STATS_COLS = pd.Index(
     [

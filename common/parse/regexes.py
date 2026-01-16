@@ -25,3 +25,5 @@ UDF_STEP_RE: re.Pattern[str] = re.compile(
 ITER_IN_DETAIL_RE: re.Pattern[str] = re.compile(
     r"\biteration:\s*(?P<iter>\d+)\b", re.IGNORECASE
 )
+
+REQID_EPOCH_MS_RE: re.Pattern[str] = re.compile(r"\.(?P<epoch_ms>\d{13})(?=\.)")

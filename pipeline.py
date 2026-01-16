@@ -7,15 +7,15 @@ from analysis.stats import (
     compare_two_queries,
     make_step_stats,
 )
-from common.config import CompareConfig
-from common.reporting import NullReporter, Reporter
-from common.results import (
+from common.model.config import CompareConfig
+from common.support.reporting import NullReporter, Reporter
+from common.model.results import (
     LogExtracts,
     PerformanceComparison,
     PipelineOutput,
     QueryEvents,
 )
-from common.types import RunInput
+from common.model.types import RunInput
 from parsers.gpe import parse_gpe
 from parsers.restpp import parse_restpp
 from transforms.attach import attach_steps_to_requests

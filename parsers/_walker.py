@@ -1,12 +1,15 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, TypeIs
+from datetime import datetime
 
 import pandas as pd
 from pandas._libs import NaTType
 
-from common.utils import detect_year_from_header, parse_glog_line
-from common.types import RunId, Node
+from common.parse.time import infer_year_from_any_line_epoch
+from common.parse.glog import parse_glog_line
+
+from common.model.types import RunId, Node
 
 type Timestampish = pd.Timestamp | NaTType
 
@@ -40,7 +43,7 @@ def walk_logs(
     file_glob: str,
     on_line: LineHandler,
 ) -> None:
-    folder_year = int(run_id.split("-", 1)[0]) if "-" in run_id else 2026
+    default_year = datetime.now().year
 
     for node in nodes:
         node_dir = run_dir / node
@@ -51,7 +54,9 @@ def walk_logs(
             if not log_path.is_file():
                 continue
 
-            file_year = detect_year_from_header(log_path, default_year=folder_year)
+            file_year = infer_year_from_any_line_epoch(
+                log_path, default_year=default_year
+            )
 
             with log_path.open("r", errors="replace") as f:
                 for lineno, line in enumerate(f, start=1):

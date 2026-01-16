@@ -1,8 +1,8 @@
 import argparse
 from pathlib import Path
 
-from common.config import AppConfig, CompareConfig
-from common.types import RunInput
+from common.model.config import AppConfig, CompareConfig
+from common.model.types import RunInput
 
 
 def _parse_run_arg(arg_value: str) -> RunInput:

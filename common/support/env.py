@@ -2,8 +2,8 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
-from common.config import CompareConfig, AppConfig
-from common.types import RunInput
+from common.model.config import CompareConfig, AppConfig
+from common.model.types import RunInput
 
 
 def _require_abs_path(var: str, raw: str | None) -> Path:

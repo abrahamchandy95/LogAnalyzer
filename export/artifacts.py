@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from common.reporting import NullReporter, Reporter
-from common.results import PipelineOutput
+from common.support.reporting import NullReporter, Reporter
+from common.model.results import PipelineOutput
 from export.paths import OutputPaths, build_output_paths
 from export.plot import plot_step_means
 from export.writers import write_csv, write_lines

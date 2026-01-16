@@ -3,7 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from common.reporting import NullReporter, Reporter
+from common.support.reporting import NullReporter, Reporter
 
 
 def open_file(path: Path, *, reporter: Reporter | None = None) -> None:
