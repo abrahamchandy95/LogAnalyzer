@@ -85,7 +85,6 @@ def run_performance_analysis(
 ) -> PipelineOutput:
     """
     Orchestrates the log analysis pipeline.
-    No side effects besides optional reporting (DIP via Reporter).
     """
     rep: Reporter = reporter if reporter is not None else NullReporter()
 

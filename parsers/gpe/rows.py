@@ -33,10 +33,6 @@ def base_row(
 
 
 def row_from_decoded(pl: ParsedLine, dec: DecodedGpe) -> GpeRow:
-    """
-    SRP: map (ParsedLine + decoded record) -> a single GPE row.
-    No pandas, no dedupe, no dataframe building.
-    """
     rid = dec.request_id
     rec = dec.record
 

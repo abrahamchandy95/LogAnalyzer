@@ -29,9 +29,6 @@ def aggregate_events(
     rows: list[RestppRow],
     reqinfo: dict[RequestId, dict[str, str]],
 ) -> pd.DataFrame:
-    """
-    SRP: aggregation into the final per-request RESTPP table.
-    """
     if not rows:
         return pd.DataFrame(columns=OUT_COLS)
 
@@ -60,10 +57,6 @@ def aggregate_events(
 
 @dataclass(slots=True)
 class RestppCollector:
-    """
-    SRP: collect raw rows + reqinfo and finalize into an aggregated dataframe.
-    """
-
     rows: list[RestppRow] = field(default_factory=list)
     reqinfo: dict[RequestId, dict[str, str]] = field(default_factory=dict)
 

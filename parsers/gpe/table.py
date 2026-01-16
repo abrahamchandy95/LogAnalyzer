@@ -18,9 +18,6 @@ type GpeDecoder = Callable[[str], DecodedGpe | None]
 
 
 def dedupe_gpe(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    SRP: dataframe-level dedupe and deterministic ordering.
-    """
     return stable_dedupe(
         df,
         sort_cols=["run", "node", "tid", "ts", "log_path", "lineno"],
@@ -30,10 +27,6 @@ def dedupe_gpe(df: pd.DataFrame) -> pd.DataFrame:
 
 @dataclass(slots=True)
 class GpeCollector:
-    """
-    SRP: collect rows and build the final dataframe.
-    """
-
     decoder: GpeDecoder
     rows: list[GpeRow] = field(default_factory=list)
 

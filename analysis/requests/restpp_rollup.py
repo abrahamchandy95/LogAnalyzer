@@ -37,10 +37,6 @@ def ensure_restpp_cols(restpp_req: pd.DataFrame) -> pd.DataFrame:
 
 
 def restpp_request_map(restpp_req: pd.DataFrame) -> pd.DataFrame:
-    """
-    DRY: One canonical (run, request_id) -> {query_name, graph_name, endpoint, node, ts...} map.
-    Reused by both summarize_requests() and build_exec_request_table().
-    """
     r = ensure_restpp_cols(restpp_req)
 
     wanted = [
@@ -64,9 +60,6 @@ def restpp_request_map(restpp_req: pd.DataFrame) -> pd.DataFrame:
 
 
 def summarize_restpp_per_request(restpp_req: pd.DataFrame) -> pd.DataFrame:
-    """
-    SRP: rename RESTPP fields to the request-summary schema.
-    """
     rmap = restpp_request_map(restpp_req)
     if rmap.empty:
         return rmap
@@ -75,9 +68,6 @@ def summarize_restpp_per_request(restpp_req: pd.DataFrame) -> pd.DataFrame:
 
 
 def add_endpoint_name(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    SRP: derive endpoint_name from full_endpoint using shared regex.
-    """
     out = df.copy()
     fe = out.get(FULL_ENDPOINT)
     if isinstance(fe, pd.Series):

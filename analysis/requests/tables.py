@@ -51,7 +51,6 @@ def build_exec_request_table(
         out_col=ACTUAL_STOP_UDF_MS,
     )
 
-    # DRY: reuse the canonical restpp_request_map (then pick the subset we care about)
     rmap = restpp_request_map(restpp_req)
     if not rmap.empty:
         keep = [

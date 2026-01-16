@@ -83,9 +83,6 @@ def walk_logs(
 ) -> None:
     """
     Walk log files and emit ParsedLine items to a caller-supplied handler.
-
-    - SRP: traversal + decoding only.
-    - DIP/OCP: year_resolver and glog_parser are injected dependencies.
     """
     default_year = datetime.now().year
 

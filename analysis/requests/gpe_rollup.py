@@ -27,10 +27,6 @@ _GROUP_KEYS = [RUN, REQUEST_ID]
 
 
 def udf_boundaries(g: pd.DataFrame) -> pd.DataFrame:
-    """
-    SRP: compute start/stop/reported Stop_RunUDF per (run, request_id).
-    DRY: used by BOTH summarize_requests() and build_exec_request_table().
-    """
     if g.empty:
         return pd.DataFrame(
             columns=pd.Index(
@@ -61,9 +57,6 @@ def udf_boundaries(g: pd.DataFrame) -> pd.DataFrame:
 
 
 def summarize_gpe_per_request(gpe_attached: pd.DataFrame) -> pd.DataFrame:
-    """
-    SRP: build the GPE-side per-request summary table.
-    """
     g = filter_notna(gpe_attached, REQUEST_ID)
     if g.empty:
         return pd.DataFrame(
