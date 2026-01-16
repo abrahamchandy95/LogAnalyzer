@@ -55,7 +55,6 @@ def restpp_request_map(restpp_req: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(columns=pd.Index([RUN, REQUEST_ID]))
 
     rsel = as_df(r.loc[:, keep].copy())
-    # single row per request (you can choose which “wins” by sorting before drop_duplicates if needed)
     return rsel.drop_duplicates(subset=[RUN, REQUEST_ID])
 
 

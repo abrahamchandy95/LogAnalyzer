@@ -1,11 +1,6 @@
 from dataclasses import dataclass
 
-from common.parse.regexes import (
-    ITER_IN_DETAIL_RE,
-    START_RUNUDF_RE,
-    STOP_RUNUDF_RE,
-    UDF_STEP_RE,
-)
+from common.parse.regexes import GPE
 from common.parse.request_id import extract_request_id
 
 from .records import (
@@ -26,12 +21,12 @@ class DecodedGpe:
 
 
 def _parse_step(msg: str) -> StepParsed | None:
-    m_step = UDF_STEP_RE.search(msg)
+    m_step = GPE.udf_step.search(msg)
     if not m_step:
         return None
 
     detail = m_step.group("detail")
-    m_iter = ITER_IN_DETAIL_RE.search(detail)
+    m_iter = GPE.iter_in_detail.search(detail)
     iter_no = int(m_iter.group("iter")) if m_iter else None
 
     return StepParsed(
@@ -43,13 +38,13 @@ def _parse_step(msg: str) -> StepParsed | None:
 
 
 def _parse_udf_start(msg: str) -> UdfStartParsed | None:
-    if START_RUNUDF_RE.search(msg):
+    if GPE.start_runudf.search(msg):
         return UdfStartParsed(detail=msg)
     return None
 
 
 def _parse_udf_stop(msg: str) -> UdfStopParsed | None:
-    m_stop = STOP_RUNUDF_RE.search(msg)
+    m_stop = GPE.stop_runudf.search(msg)
     if not m_stop:
         return None
     return UdfStopParsed(detail=msg, ms=float(m_stop.group("ms")))
