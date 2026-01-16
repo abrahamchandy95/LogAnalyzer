@@ -62,3 +62,16 @@ OPEN_PLOT=1
 ```
 Note that the program depends on the regular expressions, which in turn
 depends on the Logs.
+
+After you run scripts/bootstrap.sh, the project is installed into the virtual
+environment as a command-line tool named `loganalyzer`. 
+
+
+With your .env configured,
+you can simply run loganalyzer from the repo root and it will execute the full 
+pipeline and write artifacts to OUT_DIR. 
+
+If you prefer, you can also run it in 
+CLI mode using loganalyzer --help to see the available arguments. The command 
+name loganalyzer comes from the [project.scripts] section in pyproject.toml, 
+and you can rename it there if you want a different executable name.
