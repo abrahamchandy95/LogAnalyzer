@@ -15,13 +15,13 @@ def _parse_run_arg(arg_value: str) -> RunInput:
             f"Invalid format: '{arg_value}'. Run must be KEY=PATH (e.g., base=/path/to/logs)"
         )
 
-    key, path_str = arg_value.split("=", 1)
+    id, path_str = arg_value.split("=", 1)
 
     # Resolving path immediately ensures we fail fast if the path is invalid
     # though strict existence checking is usually done in the pipeline
     path = Path(path_str).expanduser().resolve()
 
-    return RunInput(key=key.strip(), path=path)
+    return RunInput(id=id.strip(), path=path)
 
 
 def _get_default_output_dir() -> Path:

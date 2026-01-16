@@ -3,7 +3,7 @@ from datetime import datetime
 from dataclasses import dataclass
 from typing import NamedTuple
 
-type RunKey = str
+type RunId = str
 type Node = str
 type RequestId = str
 type QueryName = str
@@ -17,5 +17,5 @@ class GlogEntry(NamedTuple):
 
 @dataclass(frozen=True, slots=True)
 class RunInput:
-    key: RunKey
+    id: RunId
     path: Path

@@ -30,8 +30,8 @@ def _ingest_logs(runs: tuple[RunInput, ...], nodes: tuple[str, ...]) -> LogExtra
         if not run.path.exists():
             raise FileNotFoundError(f"Run directory not found: {run.path}")
 
-        rest_frames.append(parse_restpp(run.key, run.path, nodes=nodes))
-        gpe_frames.append(parse_gpe(run.key, run.path, nodes=nodes))
+        rest_frames.append(parse_restpp(run.id, run.path, nodes=nodes))
+        gpe_frames.append(parse_gpe(run.id, run.path, nodes=nodes))
 
     requests = (
         pd.concat(rest_frames, ignore_index=True) if rest_frames else pd.DataFrame()

@@ -62,8 +62,8 @@ def load_env_config(*, env_path: Path) -> AppConfig:
     # Construct Config Object
     cfg = CompareConfig(
         runs=(
-            RunInput(key=run1_key, path=run1_dir),
-            RunInput(key=run2_key, path=run2_dir),
+            RunInput(id=run1_key, path=run1_dir),
+            RunInput(id=run2_key, path=run2_dir),
         ),
         nodes=nodes,
         base_query=base_query,
