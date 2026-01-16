@@ -1,9 +1,9 @@
 from math import nan
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict, TypeIs
+from typing import TypedDict, NotRequired
 
 import pandas as pd
-from pandas._libs.tslibs.nattype import NaTType
 
 from common.regexes import (
     ITER_IN_DETAIL_RE,
@@ -12,27 +12,21 @@ from common.regexes import (
     STOP_RUNUDF_RE,
     UDF_STEP_RE,
 )
-from common.utils import detect_year_from_header, parse_glog_line
-
-
-type Timestampish = pd.Timestamp | NaTType
-
-
-def is_real_timestamp(x: Timestampish) -> TypeIs[pd.Timestamp]:
-    # Pandas typing: pd.Timestamp(...) can be Timestamp | NaTType
-    return not isinstance(x, NaTType)
+from common.types import Node, RequestId, RunId
+from common.constants import GPE_GLOB, GPE_STEP, GPE_UDF_START, GPE_UDF_STOP
+from parsers._walker import ParsedLine, walk_logs
 
 
 class _GpeRow(TypedDict):
-    run: str
-    node: str
+    run: RunId
+    node: Node
     ts: pd.Timestamp
     tid: int
-    request_id: str | None
+    request_id: NotRequired[RequestId | None]
     event: str
-    udf: str | None
+    udf: NotRequired[str | None]
     label: str
-    iteration: int | None
+    iteration: NotRequired[int | None]
     detail: str
     udf_ms: float
     log_path: str
@@ -40,7 +34,7 @@ class _GpeRow(TypedDict):
     raw_msg: str
 
 
-EMPTY_GPE_COLS = pd.Index(
+_OUT_COLS = pd.Index(
     [
         "run",
         "node",
@@ -60,112 +54,198 @@ EMPTY_GPE_COLS = pd.Index(
 )
 
 
-def parse_gpe(run_key: str, run_dir: Path, *, nodes: tuple[str, ...]) -> pd.DataFrame:
+@dataclass(frozen=True, slots=True)
+class StepParsed:
+    udf: str
+    label: str
+    detail: str
+    iteration: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class UdfStartParsed:
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
+class UdfStopParsed:
+    detail: str
+    ms: float
+
+
+@dataclass(frozen=True, slots=True)
+class GpeStepRecord:
+    parsed: StepParsed
+
+
+@dataclass(frozen=True, slots=True)
+class GpeUdfStartRecord:
+    parsed: UdfStartParsed
+
+
+@dataclass(frozen=True, slots=True)
+class GpeUdfStopRecord:
+    parsed: UdfStopParsed
+
+
+type GpeRecord = GpeStepRecord | GpeUdfStartRecord | GpeUdfStopRecord
+
+
+def _extract_request_id(msg: str) -> RequestId | None:
+    m = REQ_ID_RE.search(msg)
+    return m.group("rid") if m else None
+
+
+def _parse_step(msg: str) -> StepParsed | None:
+    m_step = UDF_STEP_RE.search(msg)
+    if not m_step:
+        return None
+
+    detail = m_step.group("detail")
+    m_iter = ITER_IN_DETAIL_RE.search(detail)
+    iter_no = int(m_iter.group("iter")) if m_iter else None
+
+    return StepParsed(
+        udf=m_step.group("udf"),
+        label=m_step.group("label"),
+        detail=detail,
+        iteration=iter_no,
+    )
+
+
+def _parse_udf_start(msg: str) -> UdfStartParsed | None:
+    if START_RUNUDF_RE.search(msg):
+        return UdfStartParsed(detail=msg)
+    return None
+
+
+def _parse_udf_stop(msg: str) -> UdfStopParsed | None:
+    m_stop = STOP_RUNUDF_RE.search(msg)
+    if not m_stop:
+        return None
+    return UdfStopParsed(detail=msg, ms=float(m_stop.group("ms")))
+
+
+def _classify_msg(msg: str) -> GpeRecord | None:
+    step = _parse_step(msg)
+    if step is not None:
+        return GpeStepRecord(parsed=step)
+
+    start = _parse_udf_start(msg)
+    if start is not None:
+        return GpeUdfStartRecord(parsed=start)
+
+    stop = _parse_udf_stop(msg)
+    if stop is not None:
+        return GpeUdfStopRecord(parsed=stop)
+
+    return None
+
+
+def _base_row(
+    *,
+    pl: ParsedLine,
+    request_id: RequestId | None,
+    event: str,
+    label: str,
+    detail: str,
+    udf_ms: float,
+) -> _GpeRow:
+    return {
+        "run": pl.run,
+        "node": pl.node,
+        "ts": pl.ts,
+        "tid": pl.tid,
+        "request_id": request_id,
+        "event": event,
+        "label": label,
+        "detail": detail,
+        "udf_ms": udf_ms,
+        "log_path": str(pl.log_path),
+        "lineno": pl.lineno,
+        "raw_msg": pl.msg,
+    }
+
+
+def _make_step_row(
+    *, pl: ParsedLine, request_id: RequestId | None, parsed: StepParsed
+) -> _GpeRow:
+    row = _base_row(
+        pl=pl,
+        request_id=request_id,
+        event=GPE_STEP,
+        label=parsed.label,
+        detail=parsed.detail,
+        udf_ms=nan,
+    )
+    row["udf"] = parsed.udf
+    row["iteration"] = parsed.iteration
+    return row
+
+
+def _make_udf_start_row(
+    *, pl: ParsedLine, request_id: RequestId | None, parsed: UdfStartParsed
+) -> _GpeRow:
+    row = _base_row(
+        pl=pl,
+        request_id=request_id,
+        event=GPE_UDF_START,
+        label=GPE_UDF_START,
+        detail=parsed.detail,
+        udf_ms=nan,
+    )
+    row["udf"] = None
+    row["iteration"] = None
+    return row
+
+
+def _make_udf_stop_row(
+    *, pl: ParsedLine, request_id: RequestId | None, parsed: UdfStopParsed
+) -> _GpeRow:
+    row = _base_row(
+        pl=pl,
+        request_id=request_id,
+        event=GPE_UDF_STOP,
+        label=GPE_UDF_STOP,
+        detail=parsed.detail,
+        udf_ms=parsed.ms,
+    )
+    row["udf"] = None
+    row["iteration"] = None
+    return row
+
+
+def parse_gpe(
+    run_key: RunId, run_dir: Path, *, nodes: tuple[Node, ...]
+) -> pd.DataFrame:
     rows: list[_GpeRow] = []
-    folder_year = int(run_key.split("-", 1)[0]) if "-" in run_key else 2026
 
-    for node in nodes:
-        node_dir = run_dir / node
-        if not node_dir.exists():
-            continue
+    def _on_line(pl: ParsedLine) -> None:
+        rec = _classify_msg(pl.msg)
+        if rec is None:
+            return
 
-        for log_path in node_dir.glob("gpe*"):
-            if not log_path.is_file():
-                continue
+        rid = _extract_request_id(pl.msg)
 
-            file_year = detect_year_from_header(log_path, default_year=folder_year)
+        match rec:
+            case GpeStepRecord(parsed=step):
+                rows.append(_make_step_row(pl=pl, request_id=rid, parsed=step))
+            case GpeUdfStartRecord(parsed=start):
+                rows.append(_make_udf_start_row(pl=pl, request_id=rid, parsed=start))
+            case GpeUdfStopRecord(parsed=stop):
+                rows.append(_make_udf_stop_row(pl=pl, request_id=rid, parsed=stop))
 
-            with log_path.open("r", errors="replace") as f:
-                for lineno, line in enumerate(f, start=1):
-                    if line.startswith(">>>>>>>"):
-                        continue
-
-                    parsed = parse_glog_line(line, year=file_year)
-                    if not parsed:
-                        continue
-
-                    ts_candidate = pd.Timestamp(parsed.ts)
-                    if not is_real_timestamp(ts_candidate):
-                        continue
-                    ts: pd.Timestamp = ts_candidate
-
-                    tid = parsed.tid
-                    msg = parsed.msg
-
-                    rid_match = REQ_ID_RE.search(msg)
-                    rid = rid_match.group("rid") if rid_match else None
-
-                    m_step = UDF_STEP_RE.search(msg)
-                    if m_step:
-                        detail = m_step.group("detail")
-                        m_iter = ITER_IN_DETAIL_RE.search(detail)
-                        iter_no = int(m_iter.group("iter")) if m_iter else None
-
-                        step_row: _GpeRow = {
-                            "run": run_key,
-                            "node": node,
-                            "ts": ts,
-                            "tid": tid,
-                            "request_id": rid,
-                            "event": "STEP",
-                            "udf": m_step.group("udf"),
-                            "label": m_step.group("label"),
-                            "iteration": iter_no,
-                            "detail": detail,
-                            "udf_ms": nan,
-                            "log_path": str(log_path),
-                            "lineno": lineno,
-                            "raw_msg": msg,
-                        }
-                        rows.append(step_row)
-                        continue
-
-                    if START_RUNUDF_RE.search(msg):
-                        start_row: _GpeRow = {
-                            "run": run_key,
-                            "node": node,
-                            "ts": ts,
-                            "tid": tid,
-                            "request_id": rid,
-                            "event": "UDF_START",
-                            "udf": None,
-                            "label": "UDF_START",
-                            "iteration": None,
-                            "detail": msg,
-                            "udf_ms": nan,
-                            "log_path": str(log_path),
-                            "lineno": lineno,
-                            "raw_msg": msg,
-                        }
-                        rows.append(start_row)
-                        continue
-
-                    m_stop = STOP_RUNUDF_RE.search(msg)
-                    if m_stop:
-                        stop_row: _GpeRow = {
-                            "run": run_key,
-                            "node": node,
-                            "ts": ts,
-                            "tid": tid,
-                            "request_id": rid,
-                            "event": "UDF_STOP",
-                            "udf": None,
-                            "label": "UDF_STOP",
-                            "iteration": None,
-                            "detail": msg,
-                            "udf_ms": float(m_stop.group("ms")),
-                            "log_path": str(log_path),
-                            "lineno": lineno,
-                            "raw_msg": msg,
-                        }
-                        rows.append(stop_row)
+    walk_logs(
+        run_id=run_key,
+        run_dir=run_dir,
+        nodes=nodes,
+        file_glob=GPE_GLOB,
+        on_line=_on_line,
+    )
 
     if not rows:
-        return pd.DataFrame(columns=EMPTY_GPE_COLS)
+        return pd.DataFrame(columns=_OUT_COLS)
 
-    df = pd.DataFrame(rows)
-
-    # Typed-friendly multi-key sort: avoid pandas sort_values(list[str]) overload issues
+    df = pd.DataFrame(rows).reindex(columns=_OUT_COLS)
     df = df.set_index(["run", "node", "tid", "ts"]).sort_index().reset_index()
-
     return df.reset_index(drop=True)

@@ -11,7 +11,7 @@ build/
 .venv/
 venv/
 ENV/
-
+LogAnalyzer.egg-info/
 # --- Testing / coverage ---
 .pytest_cache/
 .coverage*
