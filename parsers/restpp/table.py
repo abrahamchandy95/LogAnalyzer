@@ -4,20 +4,21 @@ from pathlib import Path
 import pandas as pd
 
 from common.model.constants import RESTPP_GLOB
-from common.model.types import RequestId, RunId
+from common.model.types import Node, RequestId, RunId
 from parsers._walker import ParsedLine, LogWalker, walk_logs
 
-from .decode import classify_msg, make_raw_row, make_return_row
+from .decode import classify_msg
 from .records import (
     OUT_COLS,
-    RestppInfoRecord,
+    RestppRow,
     RestppRawRecord,
     RestppReturnRecord,
-    RestppRow,
+    RestppInfoRecord,
 )
+from .rows import make_raw_row, make_return_row
 
 
-def _first_str(s: pd.Series) -> str | None:
+def first_str(s: pd.Series) -> str | None:
     for x in s:
         if isinstance(x, str):
             return x
@@ -25,8 +26,12 @@ def _first_str(s: pd.Series) -> str | None:
 
 
 def aggregate_events(
-    rows: list[RestppRow], reqinfo: dict[RequestId, dict[str, str]]
+    rows: list[RestppRow],
+    reqinfo: dict[RequestId, dict[str, str]],
 ) -> pd.DataFrame:
+    """
+    SRP: aggregation into the final per-request RESTPP table.
+    """
     if not rows:
         return pd.DataFrame(columns=OUT_COLS)
 
@@ -40,11 +45,11 @@ def aggregate_events(
     agg = df.groupby(["run", "request_id"], as_index=False).agg(
         restpp_ts=("ts", "min"),
         restpp_node=("node", "first"),
-        endpoint=("endpoint", _first_str),
-        query_name=("query_name", _first_str),
-        graph_name=("graph_name", _first_str),
+        endpoint=("endpoint", first_str),
+        query_name=("query_name", first_str),
+        graph_name=("graph_name", first_str),
         restpp_return_ms=("restpp_return_ms", "max"),
-        restpp_engine=("restpp_engine", _first_str),
+        restpp_engine=("restpp_engine", first_str),
         restpp_return_ts=("return_ts", "max"),
     )
 
@@ -55,6 +60,10 @@ def aggregate_events(
 
 @dataclass(slots=True)
 class RestppCollector:
+    """
+    SRP: collect raw rows + reqinfo and finalize into an aggregated dataframe.
+    """
+
     rows: list[RestppRow] = field(default_factory=list)
     reqinfo: dict[RequestId, dict[str, str]] = field(default_factory=dict)
 
@@ -80,7 +89,7 @@ def parse_restpp(
     run_id: RunId,
     run_dir: Path,
     *,
-    nodes: tuple[str, ...],
+    nodes: tuple[Node, ...],
     walker: LogWalker = walk_logs,
 ) -> pd.DataFrame:
     collector = RestppCollector()

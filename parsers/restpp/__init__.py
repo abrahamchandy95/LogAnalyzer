@@ -1,3 +1,3 @@
-from .dataframe import parse_restpp
+from .table import parse_restpp
 
 __all__ = ["parse_restpp"]
