@@ -1,4 +1,6 @@
-from typing import Any  # Import Any
+from typing import Any
+
+import numpy as np
 import pandas as pd
 
 
@@ -19,3 +21,12 @@ def filter_notna(df: pd.DataFrame, col: str) -> pd.DataFrame:
         return df.copy()
 
     return as_df(df.loc[pd.notna(s)].copy())
+
+
+def safe_div(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
+    """
+    Performs division while safely handling divide-by-zero.
+    Replaces 0.0 in denominator with np.nan to satisfy type checkers and logic.
+    """
+    #
+    return numerator / denominator.replace(0.0, np.nan)

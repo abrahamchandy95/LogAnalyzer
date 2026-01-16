@@ -2,7 +2,7 @@ import pandas as pd
 
 from analysis.bottlenecks import top_bottlenecks
 from analysis.requests import build_exec_request_table, extract_ids, summarize_requests
-from analysis.stats import (
+from analysis.step_stats import (
     build_ordered_step_side_table,
     compare_two_queries,
     make_step_stats,
